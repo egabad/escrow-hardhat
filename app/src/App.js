@@ -1,44 +1,60 @@
 import { ethers } from 'ethers';
 import { useEffect, useState } from 'react';
-import deploy from './deploy';
 import Escrow from './Escrow';
+import FactoryJSON from './artifacts/contracts/Factory.sol/Factory.json';
+import EscrowJSON from './artifacts/contracts/Escrow.sol/Escrow.json';
 
-const provider = new ethers.providers.Web3Provider(window.ethereum);
+const getProvider = () => {
+  if (!window.ethereum) {
+    throw new Error('Install browser wallet extension');
+  }
+  return new ethers.providers.Web3Provider(window.ethereum);
+};
 
-export async function approve(escrowContract, signer) {
+const approve = async (escrowContract, signer) => {
   const approveTxn = await escrowContract.connect(signer).approve();
   await approveTxn.wait();
 }
 
+const getEscrowContract = (escrowAddress) => {
+  return new ethers.Contract(
+    escrowAddress,
+    EscrowJSON.abi,
+    provider.getSigner(),
+  );
+};
+
+const provider = getProvider();
+const eventName = 'EscrowCreated';
+const factoryContract = new ethers.Contract(
+  process.env.REACT_APP_FACTORY_ADDRESS,
+  FactoryJSON.abi,
+  provider.getSigner(),
+);
+const filter = {
+  address: process.env.REACT_APP_FACTORY_ADDRESS,
+  topics: [ethers.utils.id('EscrowCreated(address,address,address,address,uint256)')],
+};
+export const escrowStatus = {
+  NEW: 'new',
+  PREV: 'prev',
+};
+
 function App() {
   const [escrows, setEscrows] = useState([]);
-  const [account, setAccount] = useState();
-  const [signer, setSigner] = useState();
+  const [account, setAccount] = useState(null);
 
-  useEffect(() => {
-    async function getAccounts() {
-      const accounts = await provider.send('eth_requestAccounts', []);
-
-      setAccount(accounts[0]);
-      setSigner(provider.getSigner());
-    }
-
-    getAccounts();
-  }, [account]);
-
-  async function newContract() {
-    const beneficiary = document.getElementById('beneficiary').value;
-    const arbiter = document.getElementById('arbiter').value;
-    const value = ethers.BigNumber.from(document.getElementById('wei').value);
-    const escrowContract = await deploy(signer, arbiter, beneficiary, value);
-
-
-    const escrow = {
-      address: escrowContract.address,
+  const getEscrow = async (escrowAddress, arbiter, beneficiary, depositor, deposit, status = escrowStatus.PREV) => {
+    return {
+      status,
+      address: escrowAddress,
+      contract: getEscrowContract(escrowAddress),
       arbiter,
       beneficiary,
-      value: value.toString(),
+      depositor,
+      deposit: ethers.utils.formatEther(deposit.toString()) + ' ETH',
       handleApprove: async () => {
+        const escrowContract = getEscrowContract(escrowAddress);
         escrowContract.on('Approved', () => {
           document.getElementById(escrowContract.address).className =
             'complete';
@@ -46,12 +62,56 @@ function App() {
             "✓ It's been approved!";
         });
 
-        await approve(escrowContract, signer);
+        await approve(escrowContract, provider.getSigner());
       },
     };
+  };
 
-    setEscrows([...escrows, escrow]);
-  }
+  const newContract = async () => {
+    const arbiter = document.getElementById('arbiter').value;
+    const beneficiary = document.getElementById('beneficiary').value;
+    const etherValue = document.getElementById('ether').value;
+    const weiValue = ethers.utils.parseUnits(etherValue, 'ether');
+    await factoryContract.connect(provider.getSigner()).createEscrowContract(
+      arbiter,
+      beneficiary,
+      { value: weiValue.toString() },
+    );
+  };
+
+  useEffect(() => {
+    const getPrevEscrows = async () => {
+      const rawEvents = await factoryContract.queryFilter(eventName);
+
+      let prevEscrows = [];
+      rawEvents.forEach(async (rawEvent) => {
+        prevEscrows.push(await getEscrow(...rawEvent.args));
+      });
+
+      setEscrows(prevArray => [...prevArray, ...prevEscrows]);
+    };
+
+    const listenToEvents = () => {
+      factoryContract.on(filter, async (...rawEvent) => {
+        const escrow = await getEscrow(...rawEvent, escrowStatus.NEW);
+        setEscrows(prevEscrows => [...prevEscrows, escrow]);
+      });
+    };
+
+    getPrevEscrows();
+    listenToEvents();
+
+    return () => factoryContract.removeAllListeners();
+  }, []);
+
+  useEffect(() => {
+    async function getAccounts() {
+      const accounts = await provider.send('eth_requestAccounts', []);
+      setAccount(accounts[0]);
+    }
+
+    getAccounts();
+  }, [account]);
 
   return (
     <>
@@ -68,8 +128,8 @@ function App() {
         </label>
 
         <label>
-          Deposit Amount (in Wei)
-          <input type="text" id="wei" />
+          Deposit Amount (in Ether)
+          <input type="text" id="ether" />
         </label>
 
         <div
