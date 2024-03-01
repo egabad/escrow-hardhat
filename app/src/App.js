@@ -1,15 +1,32 @@
+import React from 'react';
+import { ThemeProvider } from '@mui/material/styles';
+import { Box, Typography } from '@mui/material';
+import theme from './theme';
+
 import { ethers } from 'ethers';
 import { useEffect, useState } from 'react';
-import Escrow from './Escrow';
+import Escrow from './components/Escrow';
+import NewEscrow from './components/NewEscrow';
 import FactoryJSON from './artifacts/contracts/Factory.sol/Factory.json';
 import EscrowJSON from './artifacts/contracts/Escrow.sol/Escrow.json';
+import { escrowStatus } from './constants';
 
-const getProvider = () => {
-  if (!window.ethereum) {
-    throw new Error('Install browser wallet extension');
-  }
-  return new ethers.providers.Web3Provider(window.ethereum);
+// Set provider
+const provider = new ethers.providers.Web3Provider(window.ethereum);
+
+// Set filter for event
+const eventName = 'EscrowCreated';
+const filter = {
+  address: process.env.REACT_APP_FACTORY_ADDRESS,
+  topics: [ethers.utils.id('EscrowCreated(address,address,address,address,uint256)')],
 };
+
+// Create a factory contract instance
+const factoryContract = new ethers.Contract(
+  process.env.REACT_APP_FACTORY_ADDRESS,
+  FactoryJSON.abi,
+  provider.getSigner(),
+);
 
 const approve = async (escrowContract, signer) => {
   const approveTxn = await escrowContract.connect(signer).approve();
@@ -24,25 +41,9 @@ const getEscrowContract = (escrowAddress) => {
   );
 };
 
-const provider = getProvider();
-const eventName = 'EscrowCreated';
-const factoryContract = new ethers.Contract(
-  process.env.REACT_APP_FACTORY_ADDRESS,
-  FactoryJSON.abi,
-  provider.getSigner(),
-);
-const filter = {
-  address: process.env.REACT_APP_FACTORY_ADDRESS,
-  topics: [ethers.utils.id('EscrowCreated(address,address,address,address,uint256)')],
-};
-export const escrowStatus = {
-  NEW: 'new',
-  PREV: 'prev',
-};
-
 function App() {
   const [escrows, setEscrows] = useState([]);
-  const [account, setAccount] = useState(null);
+  const [isConnected, setIsConnected] = useState(false);
 
   const getEscrow = async (escrowAddress, arbiter, beneficiary, depositor, deposit, status = escrowStatus.PREV) => {
     return {
@@ -59,7 +60,7 @@ function App() {
           document.getElementById(escrowContract.address).className =
             'complete';
           document.getElementById(escrowContract.address).innerText =
-            "✓ It's been approved!";
+            '✓ It\'s been approved!';
         });
 
         await approve(escrowContract, provider.getSigner());
@@ -67,31 +68,19 @@ function App() {
     };
   };
 
-  const newContract = async () => {
-    const arbiter = document.getElementById('arbiter').value;
-    const beneficiary = document.getElementById('beneficiary').value;
-    const etherValue = document.getElementById('ether').value;
-    const weiValue = ethers.utils.parseUnits(etherValue, 'ether');
-    await factoryContract.connect(provider.getSigner()).createEscrowContract(
-      arbiter,
-      beneficiary,
-      { value: weiValue.toString() },
-    );
-  };
-
   useEffect(() => {
     const getPrevEscrows = async () => {
       const rawEvents = await factoryContract.queryFilter(eventName);
 
       let prevEscrows = [];
-      rawEvents.forEach(async (rawEvent) => {
+      for(let rawEvent of rawEvents) {
         prevEscrows.push(await getEscrow(...rawEvent.args));
-      });
-
-      setEscrows(prevArray => [...prevArray, ...prevEscrows]);
+      }
+  
+      setEscrows(prevEscrows);
     };
 
-    const listenToEvents = () => {
+    const listenToEvents = () => { 
       factoryContract.on(filter, async (...rawEvent) => {
         const escrow = await getEscrow(...rawEvent, escrowStatus.NEW);
         setEscrows(prevEscrows => [...prevEscrows, escrow]);
@@ -105,56 +94,41 @@ function App() {
   }, []);
 
   useEffect(() => {
-    async function getAccounts() {
-      const accounts = await provider.send('eth_requestAccounts', []);
-      setAccount(accounts[0]);
-    }
+    const checkConnection = async () => {
+      if (window.ethereum) {
+        try {
+          await window.ethereum.request({ method: 'eth_requestAccounts' });
+          setIsConnected(true);
+        } catch (error) {
+          console.error(error);
+          setIsConnected(false);
+        }
+      } else {
+        setIsConnected(false);
+      }
+    };
 
-    getAccounts();
-  }, [account]);
+    checkConnection();
+  }, [isConnected]);
 
   return (
-    <>
-      <div className="contract">
-        <h1> New Contract </h1>
-        <label>
-          Arbiter Address
-          <input type="text" id="arbiter" />
-        </label>
-
-        <label>
-          Beneficiary Address
-          <input type="text" id="beneficiary" />
-        </label>
-
-        <label>
-          Deposit Amount (in Ether)
-          <input type="text" id="ether" />
-        </label>
-
-        <div
-          className="button"
-          id="deploy"
-          onClick={(e) => {
-            e.preventDefault();
-
-            newContract();
-          }}
-        >
-          Deploy
-        </div>
-      </div>
-
-      <div className="existing-contracts">
-        <h1> Existing Contracts </h1>
-
-        <div id="container">
-          {escrows.map((escrow) => {
-            return <Escrow key={escrow.address} {...escrow} />;
-          })}
-        </div>
-      </div>
-    </>
+    <ThemeProvider theme={theme}>
+      {isConnected ? (
+        <Box>
+          <NewEscrow factoryContract={factoryContract} provider={provider} />
+          <Box className='existing-contracts'>
+            <Typography variant='h2'>Existing Contracts</Typography>
+            <Box id='container'>
+              {escrows.map((escrow) => {
+                return <Escrow key={escrow.address} {...escrow} />;
+              })}
+            </Box>
+          </Box>
+        </Box>
+      ) : (
+        <Typography variant='h2'>Not connected to wallet provider!</Typography>
+      )}
+    </ThemeProvider>
   );
 }
 

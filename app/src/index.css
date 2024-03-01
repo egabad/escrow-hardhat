@@ -1,55 +1,83 @@
+@import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap');
+
 body {
-  background-color: #eee;
+  background-color: #f8f8f8;
   display: flex;
-  font-family: 'Muli', sans-serif;
+  font-family: 'Roboto', sans-serif;
+  justify-content: center;
 }
 
 .contract, .existing-contracts {
-  margin: 20px;
+  align-items: center;
   display: inline-block;
   padding: 40px;
-  border: 1px solid #ddd;
+  border: 1px solid #ccc;
   background-color: #fff;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+}
+
+.contract {
+  float: left;
+  position: fixed;
+  left: 5%; 
+}
+
+.existing-contracts {
+  float: middle;
+  box-sizing: border-box;
+  position: absolute;
+  left: 40%;
+  right: 0%;
+  width: 55%;
 }
 
 h1 {
   margin: 10px;
   padding: 10px;
-  border-bottom: 1px solid #eee;
+  border-bottom: 2px solid #ccc;
+  color: #333;
 }
 
 label {
   display: flex;
   flex-direction: column;
   text-transform: uppercase;
-  color: #aaa;
+  color: #666;
   margin: 20px;
 }
 
 input[type="text"] {
-  padding: 6px;
-  font-size: 18px;
+  padding: 10px;
+  font-size: 16px;
+  border: 1px solid #ccc;
 }
 
 .button {
-  background-color: #f58427;
-  color: white;
+  background-color: #00BFFF;
+  color: #fff;
   text-align: center;
   font-weight: bold;
   text-transform: uppercase;
   margin: 20px;
-  padding: 9px 25px;
+  padding: 12px 30px;
   font-size: 14px;
   letter-spacing: 1px;
   cursor: pointer;
+  border: none;
+  border-radius: 5px;
+  transition: background-color 0.3s;
+}
+
+.button:hover {
+  background-color: #1E90FF;
 }
 
 .existing-contract ul {
   padding: 10px;
   margin: 20px;
-  background-color: #eee;
+  background-color: #f0f0f0;
 }
-
+/* 
 .existing-contract ul > li {
   list-style: none;
   display: flex;
@@ -63,8 +91,8 @@ input[type="text"] {
 .existing-contract ul > li > :first-child {
   font-weight: bold;
 }
-
+*/
 .existing-contract .complete {
   color: #5aa75a;
   text-align: center;
-}
+} 
